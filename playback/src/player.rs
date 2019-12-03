@@ -4,7 +4,8 @@ use futures::{future, Async, Future, Poll, Stream};
 use std;
 use std::borrow::Cow;
 use std::cmp::max;
-use std::io::{Read, Result, Seek, SeekFrom};
+use std::fs::OpenOptions;
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 use std::mem;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -1415,6 +1416,12 @@ impl PlayerInternal {
         }
     }
 
+    fn notify_kodi(&mut self, event: String) {
+        // println!("Librespot fifo = {}", event);
+        let mut file = OpenOptions::new().write(true).open("/tmp/librespot").unwrap();
+        writeln!(&mut file, "{}", event).unwrap();
+    }
+
     fn send_event(&mut self, event: PlayerEvent) {
         let mut index = 0;
         while index < self.event_senders.len() {
@@ -1423,6 +1430,17 @@ impl PlayerInternal {
                 Err(_) => {
                     self.event_senders.remove(index);
                 }
+            }
+        }
+        if self.config.notify_kodi {
+            use PlayerEvent::*;
+            match event {
+                Paused { .. } => self.notify_kodi("Paused".to_string()),
+                Playing {track_id, .. } => self.notify_kodi(["Playing",
+                                               &track_id.audio_type.to_string(),
+                                               &track_id.to_base62()].join(" ")),
+                Stopped { .. } => self.notify_kodi("Stopped".to_string()),
+                _ => ()
             }
         }
     }
